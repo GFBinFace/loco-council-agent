@@ -17,7 +17,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-red.svg)](https://streamlit.io/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Source%20Available-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/Tests-178%20passing-brightgreen.svg)](tests/)
 
 ![screenshot](docs/screenshot.png)
@@ -321,4 +321,4 @@ loco-council-agent/
 
 ## License
 
-MIT
+非商用自由使用，商用需授权 — 详见 [LICENSE](LICENSE)
