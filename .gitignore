@@ -1,0 +1,46 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime data (auto-created by the application)
+data/
+logs/
+temp/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+.npm-cache/
+
+# Claude Code
+.claude/
+.agents/
+CLAUDE.md
+skills-lock.json
+
+# Local docs (maintained locally, not published)
+项目详细介绍.md
+代码结构说明.txt

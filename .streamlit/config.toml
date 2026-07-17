@@ -1,0 +1,6 @@
+[server]
+# 文件上传大小限制——与 IndexController._MAX_FILE_SIZE 保持一致
+maxUploadSize = 200
+# 关闭热重载：保存源码不触发自动 rerun，避免正在测试中的实例被干扰。
+# 改动生效方式：手动关闭浏览器标签 → 重新 streamlit run app.py。
+runOnSave = false
