@@ -261,8 +261,8 @@ loco-council-agent/
     pipeline.py       ← 核心编排器
     indexing/         ← OCR + 表格检测 + 分块
     retrieval/        ← 向量化 + 混合检索 + 重排序
-    storage/          ← DocManager + HistoryStore
     llm/              ← LLM客户端 + tools + prompts
+  storage/            ← DocManager + HistoryStore
   _types/             ← 数据契约
   utils/              ← 通用工具
   ui/                 ← 前端组件
@@ -287,7 +287,7 @@ loco-council-agent/
 | 知识库概览 + 操作历史面板 | ✅ |
 | 历史会话管理 | ✅ |
 | 上下文容量保护 | ✅ |
-| 端到端测试 | 🔧 70% |
+| 端到端测试 | ✅ |
 
 ---
 
@@ -295,7 +295,7 @@ loco-council-agent/
 
 ### 近期
 
-- [ ] **补全端到端测试** — TXT 章节识别、OCR 缓存、错误边界场景（目前 70%）。
+- [x] **补全端到端测试** — TXT 章节识别、OCR 缓存、错误边界场景。
 - [ ] **极简配置** — 抽取最少必要配置项，配好 API Key 即可运行，其余参数走默认值。高级用户可按需深入各环节细调。
 - [ ] **开机自检** — 启动时检查 SQLite、LanceDB、本地模型文件、LLM API 连通性等基础配置是否就绪，把故障定位从运行时异常提前到启动阶段。
 - [ ] **批量索引** — 一次选择多个 PDF/TXT 文件执行索引（MD5 去重已就绪）。
