@@ -9,6 +9,11 @@
 
 import os
 
+# .env 必须在任何 HF 相关导入之前加载——
+# huggingface_hub 在导入时读取 HF_ENDPOINT 生成模块常量，之后再改环境变量无效。
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
 # HF_HOME 必须在导入 pipeline 模块之前设置——
 # pipeline 的 import 链会触发 sentence_transformers 导入，该库在导入时读取 HF_HOME。
 from config import Config

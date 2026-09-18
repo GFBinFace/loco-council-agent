@@ -13,7 +13,7 @@ import os
 from config import Config
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 _HF_MODELS = [
     ("BAAI/bge-m3", "BGE-M3 嵌入模型", "约 2GB"),

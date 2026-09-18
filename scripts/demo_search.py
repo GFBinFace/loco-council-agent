@@ -38,7 +38,7 @@ for _mod in ("pipeline", "retriever", "reranker", "llm_client",
               "doc_manager", "chunkers.financial_table_chunker", "embedder",
               "progress_reporter", "logging_utils"):
     logging.getLogger(_mod).setLevel(logging.INFO)
-load_dotenv()
+load_dotenv(override=True)
 
 # HF_HOME 必须在 import pipeline 之前设置——
 # pipeline 的 import 链会触发 sentence_transformers 导入，该库在导入时读取 HF_HOME。
