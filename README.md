@@ -184,7 +184,7 @@ Pipeline 和 HistoryStore 互不知情。Controller 是唯一知道"一次搜索
 
 - Python 3.10+
 - Windows / Linux / macOS
-- 建议 16GB+ 内存（本地模型加载 BGE-M3 ~2GB + PaddleOCR）
+- 建议 16GB+ 内存（BGE-M3 启动时加载约 2GB；BGE-Reranker 与 OCR 模型按需加载）
 - 约 4GB 可用磁盘空间（存放本地模型）
 
 ### 安装

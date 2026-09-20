@@ -9,7 +9,6 @@ import numpy as np
 import cv2
 
 import re
-from paddleocr import PaddleOCR
 from services.indexing.preprocessor import ImagePreprocessor
 from config import Config, DebugConfig, LogConfig
 from services.indexing.post_ocr_character_corrector import PostOcrCharacterCorrector
@@ -46,6 +45,10 @@ class SecurePDFProcessor:
     def ocr(self):
         """PaddleOCR 引擎——首次访问时初始化，后续复用。"""
         if self._ocr is None:
+            # 延迟导入 paddle：该生态仅导入就占约 400MB 常驻内存，而它只服务 OCR。
+            # 放在模块顶层会让"只检索不索引"的会话白白承担这份开销；同时把导入
+            # 失败（如 DLL 加载错误）的影响限制在 OCR 功能内，不再拖垮整个启动。
+            from paddleocr import PaddleOCR
             self._ocr = PaddleOCR(
                 lang=self.config.ocr_lang,
                 ocr_version="PP-OCRv5",

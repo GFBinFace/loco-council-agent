@@ -51,6 +51,8 @@ class RAGPipeline:
         self.ocr_processor = SecurePDFProcessor(config)
         self.table_chunker = FinancialTableChunker(config)
         self.text_chunker = TextChunker(config)
+        # 启动开销的分布：只有 Embedder 会在这里真的加载模型（索引与检索都要用它）；
+        # SecurePDFProcessor 与 Reranker 的模型都是懒加载，首次使用时才载入。
         self.embedder = Embedder(config)
         self.retriever = LanceDBHybridRetriever(config)
         self.reranker = Reranker(config)

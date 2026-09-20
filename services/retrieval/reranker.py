@@ -5,7 +5,7 @@
 对外暴露统一的重排序入口。
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 from sentence_transformers import CrossEncoder
@@ -22,13 +22,28 @@ class Reranker:
     """重排序器：CrossEncoder二次排序 + LLM打分与分级收网。"""
 
     def __init__(self, config: Config = Config()):
-        import os
-        # 预下载是强制的初始化步骤（scripts/download_models.py），运行期禁止联网检查/下载。
-        # 模型缺失由 services/model_readiness.py 在启动时提前拦截，不会走到这里。
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
         self.config = config
-        # pipeline 模块级也已强制设置 HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE，此处系兜底
-        self.model = CrossEncoder(config.rerank_model)
+        # 懒加载：模型留到首次使用时再构造，见 model 属性。实测 BGE-Reranker
+        # 载入后约占 650MB 内存，而它只服务检索的二次排序环节——按"业务没启动
+        # 就不要加载"的原则推迟，让只做文档管理、浏览历史的会话不必承担。
+        self._model: Optional[CrossEncoder] = None
+
+    @property
+    def model(self) -> CrossEncoder:
+        """
+        CrossEncoder 模型——首次访问时加载，进程内复用。
+
+        Returns:
+            已加载的 CrossEncoder 实例。
+        """
+        if self._model is None:
+            import os
+            # 预下载是强制的初始化步骤（scripts/download_models.py），运行期禁止联网。
+            # 模型缺失由 services/model_readiness.py 在启动时提前拦截，不会走到这里；
+            # pipeline 模块级也设了同名开关，此处的 setdefault 是独立使用时的兜底。
+            os.environ.setdefault("HF_HUB_OFFLINE", "1")
+            self._model = CrossEncoder(self.config.rerank_model)
+        return self._model
 
     # ── CrossEncoder 二次排序 ──────────────────────────────────
 

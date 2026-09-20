@@ -36,7 +36,9 @@ class TestCrossEncoderRerank:
         with patch("services.retrieval.reranker.CrossEncoder") as mock_ce:
             from services.retrieval.reranker import Reranker
             r = Reranker()
-            r.model = mock_ce.return_value
+            # 模型是懒加载的：构造时不会碰 CrossEncoder，直接注入私有字段即可，
+            # 既避免测试真的触发一次模型加载，也绕开只读的 model 属性
+            r._model = mock_ce.return_value
             yield r
 
     def test_cross_encoder_rerank_scores_and_truncates(self, reranker):
