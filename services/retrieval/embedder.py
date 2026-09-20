@@ -7,7 +7,8 @@ class Embedder:
     """文本向量化"""
     
     def __init__(self, config: Config = Config()):
-        # HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE 已在 pipeline.__init__ 中强制设置
+        # local_files_only 与 pipeline 模块级设置的 HF_HUB_OFFLINE 双重保证离线：
+        # 预下载是强制的初始化步骤，运行期不允许联网取模型（缺失会在启动时被拦截）
         self.model = SentenceTransformer(
             config.embedding_model, local_files_only=True,
         )

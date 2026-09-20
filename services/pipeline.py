@@ -5,14 +5,18 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from config import Config
+from services.model_readiness import ensure_cache_dirs, ensure_local_models
 
 # ── HuggingFace 离线配置（必须在首次 import transformers / sentence_transformers 之前设置）──
 # huggingface_hub / transformers 在首次 import 时缓存配置，env var 必须在此时就生效。
-# 后续所有模型加载（Embedder、Reranker）都走本地缓存，不联网。
-if Config.huggingface_cache_dir:
-    os.environ["HF_HOME"] = Config.huggingface_cache_dir
+# 模型路径（HF_HOME）由 .env 提供；这里只强制离线——预下载是强制的初始化步骤，
+# 运行期一律走本地缓存、不联网，缺失时由 model_readiness 提前拦截并提示预装。
 os.environ["HF_HUB_OFFLINE"] = "1"      # huggingface_hub
 os.environ["TRANSFORMERS_OFFLINE"] = "1"  # transformers
+
+# 缓存目录须在导入 PaddleX 之前备好：PaddleX 在 import 时就会往缓存目录下写
+# temp/，路径不存在会直接抛 FileNotFoundError，那时还没轮到就绪检查。
+ensure_cache_dirs()
 
 from storage.doc_manager import DocManager
 from services.retrieval.embedder import Embedder
@@ -36,16 +40,10 @@ class RAGPipeline:
 
     def __init__(self, config: Config = Config()):
         self.config = config
-        # 校验 HuggingFace 缓存路径（env var 已在模块顶层设置）
-        if config.huggingface_cache_dir:
-            if not os.path.isdir(config.huggingface_cache_dir):
-                try:
-                    os.makedirs(config.huggingface_cache_dir, exist_ok=True)
-                except OSError:
-                    raise ValueError(
-                        f"huggingface_cache_dir 路径无效或无法创建: "
-                        f"{config.huggingface_cache_dir}"
-                    ) from None
+        # 准入检查：本地模型未就绪则拒绝启动，并提示执行预装脚本。
+        # 必须早于任何模型加载——否则 Embedder 会在构造时抛出难以定位的库异常
+        # （典型症状是"连不上某个 endpoint"，把人引向网络排查）。
+        ensure_local_models()
         # ⚠️ NOTICE: RAGPipeline 应在销毁时调用 self.doc_manager.close() 释放 SQLite 连接。
         # 当前 pipeline 全程存活至进程退出，操作系统会自动回收资源，暂不触发问题。
         # 如果未来增加了销毁/重建 pipeline 实例的业务逻辑（如前端热重载），必须补上。

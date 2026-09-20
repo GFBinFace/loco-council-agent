@@ -7,24 +7,19 @@
     python -m streamlit run app.py
 """
 
-import os
-
-# .env 必须在任何 HF 相关导入之前加载——
-# huggingface_hub 在导入时读取 HF_ENDPOINT 生成模块常量，之后再改环境变量无效。
+# .env 必须在任何模型库导入之前加载——它提供三类变量：
+#   HF_ENDPOINT                     huggingface_hub 在导入时读取，之后再改无效
+#   HF_HOME / PADDLE_PDX_CACHE_HOME 本地模型路径，同样在导入时被读取
+#   DEEPSEEK_API_KEY                LLM 凭据，运行期读取
 from dotenv import load_dotenv
 load_dotenv(override=True)
-
-# HF_HOME 必须在导入 pipeline 模块之前设置——
-# pipeline 的 import 链会触发 sentence_transformers 导入，该库在导入时读取 HF_HOME。
-from config import Config
-if Config.huggingface_cache_dir:
-    os.environ["HF_HOME"] = Config.huggingface_cache_dir
 
 import streamlit as st
 
 from controllers.search_controller import SearchController
 from controllers.doc_controller import DocController
 from services.pipeline import get_pipeline
+from services.model_readiness import LocalModelsNotReadyError
 from storage.history_store import HistoryStore
 from ui.search_panel import render_search_panel
 from ui.doc_mgmt_panel import render_doc_mgmt_panel
@@ -89,7 +84,14 @@ def main() -> None:
         "🔎 Loco Council — RAG 智能检索工作台</h2>"
     )
 
-    doc_ctrl, search_ctrl = get_controllers()
+    # 准入检查未通过时不渲染任何功能面板——模型未就绪，界面没有可用的东西。
+    # 异常文案已包含可直接执行的下一步动作，原样呈现给用户。
+    try:
+        doc_ctrl, search_ctrl = get_controllers()
+    except LocalModelsNotReadyError as exc:
+        st.error("🚫 本地模型未就绪，已暂停全部功能。")
+        st.text(str(exc))
+        st.stop()
 
     col_left, col_gap, col_right = st.columns([1, 0.066, 1.5])
     with col_left:

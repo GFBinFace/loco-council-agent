@@ -23,10 +23,11 @@ class Reranker:
 
     def __init__(self, config: Config = Config()):
         import os
-        # 模型由 download_models.py 预下载到 HF_HOME，禁止运行时联网检查
+        # 预下载是强制的初始化步骤（scripts/download_models.py），运行期禁止联网检查/下载。
+        # 模型缺失由 services/model_readiness.py 在启动时提前拦截，不会走到这里。
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         self.config = config
-        # HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE 已在 pipeline.__init__ 中强制设置
+        # pipeline 模块级也已强制设置 HF_HUB_OFFLINE / TRANSFORMERS_OFFLINE，此处系兜底
         self.model = CrossEncoder(config.rerank_model)
 
     # ── CrossEncoder 二次排序 ──────────────────────────────────

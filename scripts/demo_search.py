@@ -40,11 +40,8 @@ for _mod in ("pipeline", "retriever", "reranker", "llm_client",
     logging.getLogger(_mod).setLevel(logging.INFO)
 load_dotenv(override=True)
 
-# HF_HOME 必须在 import pipeline 之前设置——
-# pipeline 的 import 链会触发 sentence_transformers 导入，该库在导入时读取 HF_HOME。
 from config import Config
-if Config.huggingface_cache_dir:  # dataclass 默认值 = 类属性
-    os.environ["HF_HOME"] = Config.huggingface_cache_dir
+from services.model_readiness import LocalModelsNotReadyError
 from services.pipeline import RAGPipeline
 from _types.retrieval_types import ContinueChoice
 
@@ -126,7 +123,12 @@ def main():
     print("⏳ 初始化管线（加载 BGE-M3 + BGE-Reranker 模型）…")
     t0 = time.time()
     config = Config()
-    pipeline = RAGPipeline(config)
+    # 准入检查未通过时给出可操作提示，不抛堆栈——终端用户看得懂才有用
+    try:
+        pipeline = RAGPipeline(config)
+    except LocalModelsNotReadyError as exc:
+        print(f"🚫 {exc}")
+        return
     print(f"✅ 初始化完成，耗时 {time.time() - t0:.1f}s")
     print()
 

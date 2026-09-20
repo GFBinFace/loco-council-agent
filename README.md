@@ -174,6 +174,7 @@ Pipeline 和 HistoryStore 互不知情。Controller 是唯一知道"一次搜索
 4. **规则先行，LLM兜底** — 零成本的规则匹配覆盖90%场景，LLM处理剩余10%
 5. **段落绝不从中切开** — 语义完整性 > 尺寸均匀性
 6. **三个硬上限保护LLM上下文** — gap(20K) / context(60K) / history(5轮)
+7. **本地模型预装是强制步骤** — 数 GB 磁盘与下载流量必须由用户知情后主动承担，不在启动时静默下载；主程序启动即校验模型是否就位，未就绪则暂停全部功能
 
 ---
 
@@ -184,6 +185,7 @@ Pipeline 和 HistoryStore 互不知情。Controller 是唯一知道"一次搜索
 - Python 3.10+
 - Windows / Linux / macOS
 - 建议 16GB+ 内存（本地模型加载 BGE-M3 ~2GB + PaddleOCR）
+- 约 4GB 可用磁盘空间（存放本地模型）
 
 ### 安装
 
@@ -202,17 +204,34 @@ pip install -r requirements.txt
 # 配置环境变量
 cp .env.example .env
 # 编辑 .env，填入 DEEPSEEK_API_KEY
+# 如需把模型装到非系统盘，同时按注释填好 HF_HOME / PADDLE_PDX_CACHE_HOME
 ```
 
-### 预下载模型（推荐）
+### 预下载模型（必需）
 
-首次运行前建议预下载模型（约 3.2GB，耗时取决于网络）：
+首次运行主程序**之前必须**完成这一步。模型体积大（约 3.2GB 文件，加上等量下载流量），
+需要你明确知情后主动执行——而不是在启动时悄悄下载。
 
 ```bash
 python scripts/download_models.py
 ```
 
-包含 BGE-M3（~2GB）、BGE-Reranker（~1GB）、PaddleOCR（~200MB）。
+脚本会先列出将下载的模型、哪些已就位、预计开销，**确认后**才开始；可重复执行，
+已下载的模型会跳过。`--yes` 可跳过确认（供非交互环境使用）。
+
+包含 BGE-M3（~2GB）、BGE-Reranker（~1GB）、PP-OCRv5 检测与识别模型（~200MB）。
+
+**模型装在哪**：由 `.env` 中的两个环境变量决定，未设置时落在 C 盘用户目录：
+
+| 变量 | 管哪些模型 | 默认值 |
+|---|---|---|
+| `HF_HOME` | BGE-M3、BGE-Reranker | `%USERPROFILE%\.cache\huggingface` |
+| `PADDLE_PDX_CACHE_HOME` | PP-OCRv5 检测与识别 | `%USERPROFILE%\.paddlex` |
+
+建议在 `.env` 中指向空间充足的非系统盘（目录不存在会自动创建）。
+
+未完成预装时，主程序启动会**暂停全部功能**并提示你执行上面的脚本——这是刻意的：
+宁可明确拒绝，也不让数 GB 下载在用户不知情时发生。
 
 ### 启动
 
@@ -223,6 +242,12 @@ streamlit run app.py
 浏览器打开 `http://localhost:8501`，左侧上传PDF索引，右侧搜索问答。
 
 ### 常见问题
+
+**启动时提示"本地模型未就绪"**  
+说明还没完成模型预装——这一步是必需的，见上方 [预下载模型](#预下载模型必需)。
+执行 `python scripts/download_models.py` 即可。
+若脚本报「路径无法创建」，检查 `.env` 中 `HF_HOME` / `PADDLE_PDX_CACHE_HOME`
+所指的分区是否存在。
 
 **模型下载失败（国内网络）**  
 在 `.env` 中设置 `HF_ENDPOINT=https://hf-mirror.com` 使用 HuggingFace 镜像。

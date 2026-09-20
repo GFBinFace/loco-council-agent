@@ -58,16 +58,14 @@ class Config:
     embedding_batch_size: int = 16
 
     # ── 模型缓存路径 ──────────────────────────────────────
-    # HuggingFace 族模型的缓存目录（BGE-M3、BGE-Reranker 等）。
-    # 空字符串 = 使用默认路径（Windows: %USERPROFILE%\.cache\huggingface）。
-    # 设值后写入 HF_HOME 环境变量，首次加载模型时自动下载到该目录。
+    # 本地模型路径不在此配置——它属于"机器环境"而非"业务参数"，
+    # 统一由 .env 的两个环境变量决定（各入口在导入模型库之前加载 .env）：
+    #     HF_HOME               HuggingFace 族模型（BGE-M3、BGE-Reranker）
+    #     PADDLE_PDX_CACHE_HOME PaddleX 模型（PP-OCRv5）
+    # 两者都未设置时回退到默认路径（均在 C 盘用户目录下）。
     #
-    # 注意：PaddleOCR / PaddleX 模型不支持自定义路径（PaddleX 3.0 硬编码
-    # ~/.paddlex，不读取环境变量）。如需搬迁，请在 Windows 命令行执行：
-    #     mklink /J %USERPROFILE%\.paddlex 目标路径
-    # 这会创建一个 NTFS 目录联结（Junction），对程序透明——
-    # 程序以为写入 C 盘，实际文件存储在目标路径。
-    huggingface_cache_dir: str = ""  # 空=使用默认路径，设值后写入 HF_HOME 环境变量
+    # 模型必须由 scripts/download_models.py 预先下载到上述路径。主程序启动时
+    # 会经 services/model_readiness.py 检查，未就绪则拒绝启动并提示执行预装。
 
     # ── 检索配置 ──────────────────────────────────────────
     hybrid_search_top_k: int = 42        # 混合检索返回的候选数量上限
