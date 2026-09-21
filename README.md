@@ -8,15 +8,15 @@
 >
 > 后面优先提高阅读理解方面的体验，在OCR方向的更强功能会更新较慢。
 >
-> 🔭 **技术观察**：Jev 类决策模型值得关注——本项目的 LLM 打分环节与路线图中的
-> "多级 LLM 路由"，都是它的潜在落点。
 
 目前只支持 TXT 和 PDF 两种格式：
 
 - **PDF**：目前写死走图片式表格数据处理逻辑，全程 OCR + 后续复杂处理（每页过 LLM 分块 + tool call），消耗一定 token。
 - **TXT**：索引阶段仅在确定章节名格式时可能调 LLM 确定 regex；分块完全不依赖 LLM。
 
-> 目前索引一个3m的txt需要1~2个小时，把embedding_batch_size调整为64可以快很多，但是16G内存的机器会有爆内存的风险。
+> 现在索引一个百万字的txt需要约1个小时，把embedding_batch_size调整为64可以快很多，但是16G内存的机器会有爆内存的风险。
+
+🔭 **技术观察**：Jev 类决策模型值得关注——本项目的 LLM 打分环节与路线图中的"多级 LLM 路由"，都是它的潜在落点。
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.35+-red.svg)](https://streamlit.io/)
