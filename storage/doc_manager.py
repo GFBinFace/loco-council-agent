@@ -9,6 +9,7 @@ DocManager 是业务层操作文档数据的唯一入口，内部协调两个存
 
 import os
 import sqlite3
+import time
 from datetime import datetime
 from typing import Dict, List, Optional
 
@@ -22,6 +23,10 @@ from utils import get_file_logger
 logger = get_file_logger(__file__)
 # 每个文档默认的分组
 _DEFAULT_GROUP = "default"
+# FTS 建索引的重试策略。Windows 上极小概率会拒绝新建索引文件（实测是一个
+# 约两秒的瞬时窗口），退避后重试一次即可跨过。
+_FTS_MAX_ATTEMPTS = 2
+_FTS_RETRY_DELAY_SECONDS = 2.0
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -59,7 +64,7 @@ class _ChunkStore:
             self._table = self._db.create_table(
                 self._table_name, data=df, mode="overwrite",
             )
-            self._table.create_fts_index("text")
+            self._create_fts_index()
             if len(df) >= 256:
                 num_partitions = min(256, max(1, len(df) - 1))
                 self._table.create_index(
@@ -83,25 +88,48 @@ class _ChunkStore:
                 logger.info("文档 %s 已存在 LanceDB 中，跳过", doc_id[:16])
                 return {'added': 0, 'skipped': True}
 
-        # 常规写入数据。
+        # 写入 chunk。此处不再重建 FTS——原生倒排索引随 append 自动增量维护，
+        # 新行立即可搜。旧实现每次全量重建 Tantivy 索引（347 条要 9 秒、几十次
+        # 文件增删），既是性能瓶颈，也是 Windows PermissionDenied 的温床。
         self._table.add(df)
         logger.info("LanceDB 写入 %d 条 chunk", len(chunks))
-        # 追加数据后重建 FTS 索引——LanceDB 的 Tantivy FTS 不会自动索引
-        # 后续 ADD 的新行。若表已存在且此前已建过 FTS，重建覆盖旧索引，
-        # 确保全文检索覆盖全部数据（曾致首文档外所有被追加文档的 BM25 通路
-        # 静默返回空——全表有数据但搜不到）。
-        try:
-            self._table.create_fts_index("text", replace=True)
-        except Exception:
-            logger.exception(
-                "FTS 索引重建失败——数据已写入 LanceDB 但全文检索不可用，"
-                "请删除此文档后重新索引"
-            )
-            raise
-        logger.info(
-            "FTS 索引已重建，覆盖 %d 条 chunk", self._table.count_rows(),
-        )
         return {'added': len(chunks), 'skipped': False}
+
+    # ── 索引维护 ──────────────────────────────────────────
+
+    def _create_fts_index(self) -> None:
+        """
+        建立全文检索索引（Lance 原生倒排）。
+
+        走原生路径而非 LanceDB 默认的 Tantivy 路径，两个理由：
+        1. 原生索引随 append 自动增量维护，无需每次全量重建；
+        2. 只有原生路径能通过 max_token_length=None 关掉默认的 40 字节词长
+           截断——默认值会把超过约 13 个汉字的无标点中文整段丢弃。
+
+        Windows 上极小概率会拒绝新建索引文件（PermissionDenied，实测是一个
+        约两秒的瞬时窗口），因此失败后退避重试一次。
+
+        Raises:
+            Exception: 达到尝试上限仍失败时，抛出最后一次的异常。
+        """
+        for attempt in range(1, _FTS_MAX_ATTEMPTS + 1):
+            try:
+                self._table.create_fts_index(
+                    "text", use_tantivy=False, max_token_length=None,
+                )
+            except Exception as exc:
+                # 达到上限就带着栈抛出去——诊断这类文件系统故障全靠这条日志
+                if attempt == _FTS_MAX_ATTEMPTS:
+                    logger.exception("FTS 索引建立失败，已达尝试上限")
+                    raise
+                logger.warning(
+                    "FTS 索引建立失败（第 %d 次尝试），%.1f 秒后重试: %s",
+                    attempt, _FTS_RETRY_DELAY_SECONDS, exc,
+                )
+                time.sleep(_FTS_RETRY_DELAY_SECONDS)
+                continue
+            logger.info("FTS 索引已建立（原生倒排，第 %d 次尝试）", attempt)
+            return
 
     # ── 删除 ──────────────────────────────────────────────
 
