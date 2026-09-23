@@ -105,3 +105,36 @@ class TestRetrieverSearch:
         result = retriever.search("查询", query_vector)
 
         assert result[0].page_nums == []
+
+    # ── 句柄释放：三个出口都必须释放 ──────────────────────
+    # 实测（2026-09-24）：只要还有存活的 Table 对象，Windows 上就重建不了
+    # FTS 索引，报 "Failed to open file for write ... PermissionDenied"。
+
+    def test_table_handle_released_when_no_enabled_docs(self, retriever):
+        """无启用文档时提前返回——句柄不能留着。"""
+        self._setup_mock_table(retriever, _make_mock_df([]))
+
+        result = retriever.search(
+            "查询", np.random.randn(1024).astype(np.float32), allowed_doc_ids=[],
+        )
+
+        assert result == []
+        assert retriever.table is None
+
+    def test_table_handle_released_when_search_raises(self, retriever):
+        """检索中途抛异常——句柄同样不能留着，否则会锁住后续索引写入。"""
+        mock_search = self._setup_mock_table(retriever, _make_mock_df([]))
+        mock_search.to_pandas.side_effect = RuntimeError("查询执行失败")
+
+        with pytest.raises(RuntimeError):
+            retriever.search("查询", np.random.randn(1024).astype(np.float32))
+
+        assert retriever.table is None
+
+    def test_table_handle_released_on_success(self, retriever):
+        """正常出口的释放行为不能被这次改动破坏。"""
+        self._setup_mock_table(retriever, _make_mock_df([]))
+
+        retriever.search("查询", np.random.randn(1024).astype(np.float32))
+
+        assert retriever.table is None

@@ -59,8 +59,8 @@ class LanceDBHybridRetriever:
         """
         # 每次检索都重新 open_table——既保证索引后新 FTS 数据立即可见
         # （LanceDB 0.16 Table 对象内部缓存了旧的 FTS index handle），
-        # 又保证搜完即释放句柄（table=None），避免句柄在 Windows 上
-        # 长期持有文件锁阻塞后续索引的 LanceDB 写入。
+        # 又保证搜完即释放句柄，避免句柄在 Windows 上持有文件锁
+        # 阻塞后续索引的 LanceDB 写入。释放放在 finally 里，异常路径同样覆盖。
         # open_table 是纯元数据操作（~0.2ms），不加载向量或 FTS 数据。
         try:
             self.table = self.db.open_table(self.table_name)
@@ -68,68 +68,72 @@ class LanceDBHybridRetriever:
             logger.warning("LanceDB 表 %s 不存在，返回空结果", self.table_name)
             return []
 
-        logger.info(
-            "混合检索开始，query=%.80s...，top_k=%d", query, top_k,
-        )
+        try:
+            logger.info(
+                "混合检索开始，query=%.80s...，top_k=%d", query, top_k,
+            )
 
-        # 检索数据
-        builder = (
-            self.table.search(query_type="hybrid")
-            .vector(query_vector.tolist())
-            .text(query)
-            .rerank(reranker=self.reranker)
-            .limit(top_k)
-        )
-        if allowed_doc_ids is not None:
-            if not allowed_doc_ids:
-                # 没有启用的文档，无需检索任何文档，直接返回空列表。
-                return []
-            ids_str = ", ".join(f"'{did}'" for did in allowed_doc_ids)
-            builder = builder.where(f"doc_id IN ({ids_str})") # 限定检索的文档 ID
-        results_df = builder.to_pandas()
+            # 检索数据
+            builder = (
+                self.table.search(query_type="hybrid")
+                .vector(query_vector.tolist())
+                .text(query)
+                .rerank(reranker=self.reranker)
+                .limit(top_k)
+            )
+            if allowed_doc_ids is not None:
+                if not allowed_doc_ids:
+                    # 没有启用的文档，无需检索任何文档，直接返回空列表。
+                    return []
+                ids_str = ", ".join(f"'{did}'" for did in allowed_doc_ids)
+                builder = builder.where(f"doc_id IN ({ids_str})") # 限定检索的文档 ID
+            results_df = builder.to_pandas()
 
-        # 将 LanceDB 结果转换为 ChunkCandidate 列表
-        candidates: List[ChunkCandidate] = []
-        for _, row in results_df.iterrows():
-            # LanceDB 存储时用 str() 序列化了列表，这里用 ast.literal_eval 还原
-            try:
-                page_nums = ast.literal_eval(row["page_nums"])
-                if not isinstance(page_nums, list):
+            # 将 LanceDB 结果转换为 ChunkCandidate 列表
+            candidates: List[ChunkCandidate] = []
+            for _, row in results_df.iterrows():
+                # LanceDB 存储时用 str() 序列化了列表，这里用 ast.literal_eval 还原
+                try:
+                    page_nums = ast.literal_eval(row["page_nums"])
+                    if not isinstance(page_nums, list):
+                        page_nums = []
+                except (ValueError, SyntaxError):
                     page_nums = []
-            except (ValueError, SyntaxError):
-                page_nums = []
 
-            try:
-                has_financial_keywords = ast.literal_eval(row["has_financial_keywords"])
-                if not isinstance(has_financial_keywords, list):
+                try:
+                    has_financial_keywords = ast.literal_eval(row["has_financial_keywords"])
+                    if not isinstance(has_financial_keywords, list):
+                        has_financial_keywords = []
+                except (ValueError, SyntaxError):
                     has_financial_keywords = []
-            except (ValueError, SyntaxError):
-                has_financial_keywords = []
 
-            # 章节字段：旧版建的表无此列，Series.get 缺省空串；
-            # 再做类型防御（NaN 等非字符串一律归空）
-            chapter_title = row.get("chapter_title", "")
-            chapter_index = row.get("chapter_index", "")
-            candidates.append(ChunkCandidate(
-                id=row["id"],
-                text=row["text"],
-                doc_id=row.get("doc_id", ""),
-                doc_name=row.get("doc_name", ""),
-                page_nums=page_nums,
-                chunk_index=int(row["chunk_index"]),
-                length=int(row.get("length", 0)),
-                type=row.get("type", "mixed"),
-                has_financial_keywords=has_financial_keywords,
-                chapter_title=chapter_title if isinstance(chapter_title, str) else "",
-                chapter_index=chapter_index if isinstance(chapter_index, str) else "",
-                hybrid_score=float(row.get("_relevance_score", 0.0)),
-            ))
+                # 章节字段：旧版建的表无此列，Series.get 缺省空串；
+                # 再做类型防御（NaN 等非字符串一律归空）
+                chapter_title = row.get("chapter_title", "")
+                chapter_index = row.get("chapter_index", "")
+                candidates.append(ChunkCandidate(
+                    id=row["id"],
+                    text=row["text"],
+                    doc_id=row.get("doc_id", ""),
+                    doc_name=row.get("doc_name", ""),
+                    page_nums=page_nums,
+                    chunk_index=int(row["chunk_index"]),
+                    length=int(row.get("length", 0)),
+                    type=row.get("type", "mixed"),
+                    has_financial_keywords=has_financial_keywords,
+                    chapter_title=chapter_title if isinstance(chapter_title, str) else "",
+                    chapter_index=chapter_index if isinstance(chapter_index, str) else "",
+                    hybrid_score=float(row.get("_relevance_score", 0.0)),
+                ))
 
-        logger.info(
-            "混合检索完成，返回 %d 个候选 chunk", len(candidates),
-        )
-        # 搜完释放句柄——LanceDB 0.16 没有 close()，
-        # 依赖 CPython 引用计数立即回收 + Rust Drop 关闭文件句柄
-        self.table = None
-        return candidates
+            logger.info(
+                "混合检索完成，返回 %d 个候选 chunk", len(candidates),
+            )
+            return candidates
+        finally:
+            # 无论正常返回、提前返回还是抛异常，都必须释放句柄——LanceDB 0.16
+            # 没有 close()，靠引用计数 + Rust Drop 关闭文件句柄。
+            # 实测（2026-09-24）：只要还有存活的 Table 对象，Windows 上就重建不了
+            # FTS 索引，报 "Failed to open file for write ... PermissionDenied"。
+            self.table = None
 
