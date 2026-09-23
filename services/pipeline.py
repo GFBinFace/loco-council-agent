@@ -1,5 +1,6 @@
 import ast
 import os
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
@@ -29,7 +30,13 @@ from services.llm.prompts.answer import DIRECT_LLM_SYSTEM_PROMPT, RAG_SYSTEM_PRO
 from services.retrieval.reranker import Reranker
 from services.retrieval.retriever import LanceDBHybridRetriever
 from _types.retrieval_types import ChunkCandidate, ContinueChoice, SearchResult
-from utils import compute_file_md5, extract_doc_name, read_text_file, tokens_to_chars
+from utils import (
+    compute_file_md5,
+    extract_doc_name,
+    format_duration,
+    read_text_file,
+    tokens_to_chars,
+)
 
 from utils import get_file_logger
 logger = get_file_logger(__file__)
@@ -112,6 +119,8 @@ class RAGPipeline:
             on_progress: 进度回调，签名为 (status_line: str | None, log_line: str | None)
         """
         progress_reporter = ProgressReporter(on_progress, logger=logger)
+        # 索引全程计时：下面三条结束路径（失败 / 跳过 / 成功）都要带总耗时
+        t_index_start = time.time()
         doc_name = extract_doc_name(file_path)
         doc_name = doc_name or os.path.basename(file_path)
 
@@ -164,7 +173,10 @@ class RAGPipeline:
             }
 
         if not chunks:
-            progress_reporter.report_task_end(f"❌ 索引失败：{doc_name}")
+            progress_reporter.report_task_end(
+                f"❌ 索引失败：{doc_name}"
+                f"（总耗时 {format_duration(time.time() - t_index_start)}）",
+            )
             return {
                 'doc_id': document_id,
                 'doc_name': doc_name,
@@ -208,7 +220,8 @@ class RAGPipeline:
         progress_reporter.report_phase_end("向量嵌入与入库完成")
         if lancedb_result.get('skipped'):
             progress_reporter.report_task_end(
-                f"索引结束：此文档已在数据库中存在，跳过索引。",
+                f"索引结束：此文档已在数据库中存在，跳过索引。"
+                f"（本次总耗时 {format_duration(time.time() - t_index_start)}）",
             )
             return {
                 'doc_id': document_id,
@@ -220,7 +233,8 @@ class RAGPipeline:
             }
 
         progress_reporter.report_task_end(
-            f"索引完成：{doc_name} — {len(chunks)} chunks",
+            f"索引完成：{doc_name} — {len(chunks)} chunks"
+            f"（总耗时 {format_duration(time.time() - t_index_start)}）",
         )
         return {
             'doc_id': document_id,
@@ -242,10 +256,16 @@ class RAGPipeline:
         """PDF 分块：OCR → LLM 切块。返回 (chunks, token_usage)。"""
         progress_reporter = ProgressReporter(on_progress, logger=logger)
 
-        # ── OCR 识别（逐页回调，汇报进度）──
+        # ── OCR 识别（逐页回调汇报进度；用 phase 包住以取得阶段总耗时）──
+        progress_reporter.report_phase_start("OCR 扫描中…", "开始 OCR 扫描")
         ocr_result = self.ocr_processor.try_process(file_path, on_progress=on_progress)
         if not ocr_result:
+            progress_reporter.report_phase_end("OCR 扫描未取得任何页面")
             return None, {"input": 0, "output": 0}
+        # ocr_result[0] 是占位空串，真实页数为长度减一
+        progress_reporter.report_phase_end(
+            f"OCR 扫描完成，共 {len(ocr_result) - 1} 页",
+        )
 
         # ── LLM 分块 ──
         progress_reporter.report_phase_start(

@@ -15,12 +15,14 @@ sub-phase 可视化：
     report_phase_start(status="OCR 扫描中… 3/16", log="开始处理第 3/16 页 OCR")
         阶段内工作
     report_phase_end(log="第 3/16 页 OCR 完成，获得 2045 字符")
-        → 实际发出: "第 3/16 页 OCR 完成，获得 2045 字符，耗时 15.5s"
+        → 实际发出: "第 3/16 页 OCR 完成，获得 2045 字符，耗时 15.5秒"
 """
 
 import logging
 import time
 from typing import Callable, Optional
+
+from utils import format_duration
 
 
 class ProgressReporter:
@@ -71,10 +73,10 @@ class ProgressReporter:
                 "ProgressReporter.report_phase_end() 缺少前置 "
                 "report_phase_start()，计时器未启动。"
             )
-        elapsed = round(time.time() - self._tick, 1)
+        elapsed = time.time() - self._tick
         self._tick = self._TICK_IDLE
         if log_line is not None:
-            log_line = f"{log_line}，耗时 {elapsed}s"
+            log_line = f"{log_line}，耗时 {format_duration(elapsed)}"
         self._emit(None, log_line)
         if self._logger and log_line:
             self._logger.info(log_line)

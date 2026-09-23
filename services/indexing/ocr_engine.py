@@ -13,7 +13,12 @@ from services.indexing.preprocessor import ImagePreprocessor
 from config import Config, DebugConfig, LogConfig
 from services.indexing.post_ocr_character_corrector import PostOcrCharacterCorrector
 from services.indexing.borderless_table import reconstruct_table, table_to_markdown
-from utils import get_file_logger, write_debug_data, write_debug_data_lines
+from utils import (
+    format_duration,
+    get_file_logger,
+    write_debug_data,
+    write_debug_data_lines,
+)
 logger = get_file_logger(__file__)
 
 
@@ -257,10 +262,10 @@ class SecurePDFProcessor:
             result["corrections"] = stats["corrections"]
             result["entity_corrections"] = stats.get("entity_corrections", 0)
 
-            elapsed = time.time() - t_start
             logger.info(
-                "PaddleOCR + coord 页 %d: %.1fs, 修正 %d 处（实体 %d）",
-                page_num + 1, elapsed, stats["corrections"],
+                "PaddleOCR + coord 页 %d: %s, 修正 %d 处（实体 %d）",
+                page_num + 1, format_duration(time.time() - t_start),
+                stats["corrections"],
                 stats.get("entity_corrections", 0),
             )
 
@@ -418,10 +423,10 @@ class SecurePDFProcessor:
                     )
                     # 逐页进度汇报：阶段结束
                     if on_progress:
-                        page_elapsed = round(time.time() - t_page, 1)
+                        page_elapsed = format_duration(time.time() - t_page)
                         on_progress(
                             None,
-                            f"第 {page_display}/{total_pages} 页 OCR 完成，获得 {len(page_text)} 字符，耗时 {page_elapsed}s",
+                            f"第 {page_display}/{total_pages} 页 OCR 完成，获得 {len(page_text)} 字符，耗时 {page_elapsed}",
                         )
 
                 except Exception as e:
@@ -442,10 +447,10 @@ class SecurePDFProcessor:
                     )
                     # 逐页进度汇报：失败但仍结束
                     if on_progress:
-                        page_elapsed = round(time.time() - t_page, 1)
+                        page_elapsed = format_duration(time.time() - t_page)
                         on_progress(
                             None,
-                            f"第 {page_display}/{total_pages} 页 OCR 失败，耗时 {page_elapsed}s: {e}",
+                            f"第 {page_display}/{total_pages} 页 OCR 失败，耗时 {page_elapsed}: {e}",
                         )
 
                 finally:

@@ -227,6 +227,39 @@ class TestExecuteIndex:
         finally:
             os.unlink(pdf_path)
 
+    def test_elapsed_reported_on_success(self, controller, mock_pipeline):
+        """总耗时由 Controller 计时并放进结果——UI 的完成 log 行要用它。"""
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(b"%PDF-1.4\nfake content")
+            pdf_path = f.name
+        try:
+            result = controller.execute_index(pdf_path)
+
+            assert result["elapsed_text"]
+            assert result["elapsed_text"].endswith("秒")
+        finally:
+            os.unlink(pdf_path)
+
+    def test_elapsed_reported_on_pipeline_exception(self, controller, mock_pipeline):
+        """异常路径最需要知道白花了多久——计时放在 Controller 正是为了覆盖它。"""
+        mock_pipeline.index_document.side_effect = RuntimeError("FTS 写入被拒")
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(b"%PDF-1.4\nfake content")
+            pdf_path = f.name
+        try:
+            result = controller.execute_index(pdf_path)
+
+            assert result["elapsed_text"]
+            assert result["elapsed_text"].endswith("秒")
+        finally:
+            os.unlink(pdf_path)
+
+    def test_validation_failure_reports_no_elapsed(self, controller):
+        """校验失败没做任何实际工作，不报耗时（UI 据此省略后缀）。"""
+        result = controller.execute_index("/nonexistent/file.pdf")
+
+        assert not result.get("elapsed_text")
+
     def test_pipeline_exception_extracts_doc_name(self, controller, mock_pipeline):
         """pipeline 异常时仍返回 doc_name。"""
         mock_pipeline.index_document.side_effect = RuntimeError("boom")

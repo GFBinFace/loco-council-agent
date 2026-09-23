@@ -381,11 +381,15 @@ def _render_upload_section(
 
             token_usage = result.get("token_usage")
             doc_name_short = result.get("doc_name", doc_name)
+            # 总耗时由 Controller 计时（异常路径也覆盖）；校验失败无实际耗时，为 None
+            elapsed = result.get("elapsed_text")
+            elapsed_suffix = f"（总耗时 {elapsed}）" if elapsed else ""
             if result.get("success"):
                 if token_usage:
                     accumulate_session_tokens(token_usage, "index")
                 add_progress_log(
-                    f"索引完成: {doc_name_short} — {result.get('num_chunks', 0)} chunks",
+                    f"索引完成: {doc_name_short} — {result.get('num_chunks', 0)} chunks"
+                    f"{elapsed_suffix}",
                     key=Keys.PROGRESS_LOG_DOC,
                 )
                 st.success(
@@ -394,11 +398,15 @@ def _render_upload_section(
                        if token_usage else "")
                 )
             elif result.get("skipped"):
-                add_progress_log(f"索引跳过: {doc_name_short} — 已存在", key=Keys.PROGRESS_LOG_DOC)
+                add_progress_log(
+                    f"索引跳过: {doc_name_short} — 已存在{elapsed_suffix}",
+                    key=Keys.PROGRESS_LOG_DOC,
+                )
                 st.info(f"⏭️ {doc_name_short} — 已存在，跳过索引")
             else:
                 add_progress_log(
-                    f"索引失败: {doc_name_short} — {result.get('error', '未知错误')}",
+                    f"索引失败: {doc_name_short} — {result.get('error', '未知错误')}"
+                    f"{elapsed_suffix}",
                     key=Keys.PROGRESS_LOG_DOC,
                 )
                 st.error(f"❌ 索引失败: {result.get('error', '未知错误')}")

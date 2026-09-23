@@ -79,3 +79,27 @@ def extract_doc_name(pdf_path: str) -> str:
     if basename.lower().endswith('.pdf'):
         return basename[:-4]
     return basename
+
+
+def format_duration(seconds: float) -> str:
+    """
+    把秒数格式化成便于人读的时长。
+
+    规则：不足 1 分钟只显示秒；达到分钟显示「分+秒」；达到小时显示「时+分+秒」。
+    秒级保留一位小数（此处精度有意义），分/时级取整秒（到那个量级小数已是噪声）。
+
+    Args:
+        seconds: 时长（秒）。负数按 0 处理。
+
+    Returns:
+        形如 "45.3秒" / "2分15秒" / "1时2分15秒" 的字符串。
+    """
+    total = max(0.0, seconds)
+    if total < 60:
+        return f"{total:.1f}秒"
+    whole = int(total)
+    minutes, secs = divmod(whole, 60)
+    if minutes < 60:
+        return f"{minutes}分{secs}秒"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}时{minutes}分{secs}秒"

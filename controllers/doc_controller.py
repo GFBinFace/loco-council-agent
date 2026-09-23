@@ -5,9 +5,11 @@ DocController 是前端左侧文档面板与 Pipeline 之间的编排器，
 """
 
 import os
+import time
 from typing import Callable, Optional
 
 from config import Config
+from utils import format_duration
 
 
 class DocController:
@@ -71,8 +73,14 @@ class DocController:
                 "num_chunks": int,
                 "token_usage": {"input": N, "output": N} | None,
                 "error": str | None,
+                "elapsed_text": str | None,
+                    # 本操作的总耗时（人读格式）。由 Controller 计时而非 Pipeline，
+                    # 因为 Pipeline 抛异常时拿不到它的计时结果，而异常恰恰是最需要
+                    # 知道"白花了多久"的场景。校验失败没有实际耗时，为 None。
             }
         """
+        # 全程计时：异常路径和正常路径共用同一起点
+        t_start = time.time()
         error = self._validate(file_path)
         if error is not None:
             if on_progress:
@@ -102,6 +110,7 @@ class DocController:
                 "num_chunks": 0,
                 "token_usage": None,
                 "error": str(exc),
+                "elapsed_text": format_duration(time.time() - t_start),
             }
 
         return {
@@ -112,6 +121,7 @@ class DocController:
             "num_chunks": result.get("num_chunks", 0),
             "token_usage": result.get("token_usage"),
             "error": result.get("error"),
+            "elapsed_text": format_duration(time.time() - t_start),
         }
 
     def list_operations(

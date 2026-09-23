@@ -372,3 +372,63 @@ class TestFillGaps:
         result = pipeline._fill_gaps([a, b])
 
         assert len(result) == 2
+
+
+class TestIndexTiming:
+    """索引过程的时间汇报：OCR 阶段总耗时 + 索引总耗时。"""
+
+    def test_chunk_image_pdf_reports_ocr_phase_with_duration(self):
+        """OCR 阶段收尾要有一条带耗时的汇报——逐页之外的总账。"""
+        pipeline = _make_mock_pipeline()
+        pipeline.ocr_processor.try_process.return_value = ["", "第一页", "第二页"]
+        pipeline.table_chunker.chunk_pages.return_value = ([], {"input": 0, "output": 0})
+        calls = []
+
+        pipeline._chunk_image_pdf(
+            "dummy.pdf", "docid", "dummy",
+            on_progress=lambda s, l: calls.append(l),
+        )
+
+        logs = [l for l in calls if l]
+        assert "开始 OCR 扫描" in logs
+        ends = [l for l in logs if l.startswith("OCR 扫描完成")]
+        assert len(ends) == 1
+        assert "2 页" in ends[0]  # 首元素是占位空串，真实页数要减一
+        assert "耗时" in ends[0]
+
+    def test_chunk_image_pdf_closes_ocr_phase_when_no_pages(self):
+        """OCR 一页都没拿到时也要收尾，不能让计时器悬着。"""
+        pipeline = _make_mock_pipeline()
+        pipeline.ocr_processor.try_process.return_value = []
+        calls = []
+
+        chunks, _ = pipeline._chunk_image_pdf(
+            "dummy.pdf", "docid", "dummy",
+            on_progress=lambda s, l: calls.append(l),
+        )
+
+        assert chunks is None
+        assert any(l for l in calls if l and l.startswith("OCR 扫描未取得"))
+
+    def test_index_document_reports_total_duration(self, tmp_path):
+        """索引结束的状态行要带总耗时——失败路径同样要有，那正是想知道花了多久的时候。
+
+        状态 log 里的完成行不在这里发（由 UI 层带错误文本一起发），
+        原因见 progress_reporter.report_task_end 的 docstring。
+        """
+        pdf = tmp_path / "sample.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n")
+        pipeline = _make_mock_pipeline()
+        pipeline.doc_manager.has_document.return_value = False
+        # OCR 拿不到任何页面 → 分块为空 → 走失败路径
+        pipeline.ocr_processor.try_process.return_value = []
+        status_lines = []
+
+        result = pipeline.index_document(
+            str(pdf), on_progress=lambda s, l: status_lines.append(s),
+        )
+
+        assert result["success"] is False
+        ends = [s for s in status_lines if s and s.startswith("❌ 索引失败")]
+        assert len(ends) == 1
+        assert "总耗时" in ends[0]
